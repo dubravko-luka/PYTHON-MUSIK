@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 from flask import request, jsonify
 from werkzeug.utils import secure_filename
+from flask import send_from_directory
 import jwt
 from ..db.db import mysql
 
@@ -61,3 +62,165 @@ def music_routes(app):
             return jsonify({"message": "Music uploaded successfully"}), 201
         else:
             return jsonify({"message": "File type not allowed"}), 400
+        
+    @app.route('/list_music', methods=['GET'])
+    def list_music():
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+        
+        cursor = mysql.connection.cursor()
+        query = """
+            SELECT 
+                music.id, 
+                music.file_path, 
+                music.description, 
+                music.created_at, 
+                users.name AS user_name,
+                users.id AS user_id,
+                CASE 
+                    WHEN favourites.id IS NOT NULL THEN TRUE 
+                    ELSE FALSE 
+                END AS liked,
+                CASE 
+                    WHEN album_music.music_id IS NOT NULL THEN TRUE 
+                    ELSE FALSE 
+                END AS in_album,
+                album_music.album_id
+            FROM music
+            JOIN users ON music.user_id = users.id
+            LEFT JOIN favourites ON music.id = favourites.music_id AND favourites.user_id = %s
+            LEFT JOIN album_music ON music.id = album_music.music_id
+            LEFT JOIN albums ON album_music.album_id = albums.id AND albums.user_id = %s
+            ORDER BY music.created_at DESC
+        """
+        cursor.execute(query, (user_id, user_id))
+        music_list = cursor.fetchall()
+        cursor.close()
+
+        # Convert the list of music into a serializable format
+        result = []
+        for music in music_list:
+            result.append({
+                "id": music['id'],
+                "file_path": music['file_path'],
+                "description": music['description'],
+                "created_at": music['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "user_name": music['user_name'],
+                "user_id": music['user_id'],
+                "liked": music['liked'],
+                "in_album": music['in_album'],
+                "album_id": music['album_id']  # Include album_id in the response
+            })
+
+        return jsonify(result), 200
+
+    @app.route('/my_music', methods=['GET'])
+    def my_music():
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        cursor = mysql.connection.cursor()
+        query = """
+            SELECT music.id, music.file_path, music.description, music.created_at, users.name as name
+            FROM music 
+            JOIN users ON music.user_id = users.id
+            WHERE music.user_id = %s
+            ORDER BY music.created_at DESC
+        """
+        cursor.execute(query, (user_id,))
+        music_list = cursor.fetchall()
+        cursor.close()
+
+        return jsonify(music_list), 200
+
+    @app.route('/music/<int:music_id>', methods=['GET'])
+    def music_detail(music_id):
+        cursor = mysql.connection.cursor()
+        query = "SELECT id, file_path, description, created_at, user_id FROM music WHERE id = %s"
+        cursor.execute(query, (music_id,))
+        music_detail = cursor.fetchone()
+        cursor.close()
+
+        if music_detail:
+            return jsonify(music_detail), 200
+        else:
+            return jsonify({"message": "Music not found"}), 404
+
+    @app.route('/delete_music/<int:music_id>', methods=['DELETE'])
+    def delete_music(music_id):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        cursor = mysql.connection.cursor()
+        query = "SELECT user_id, file_path FROM music WHERE id = %s"
+        cursor.execute(query, (music_id,))
+        music = cursor.fetchone()
+
+        if not music:
+            return jsonify({"message": "Music not found"}), 404
+
+        if music['user_id'] != user_id:
+            return jsonify({"message": "Unauthorized action"}), 403
+
+        os.remove(music['file_path'])
+        delete_query = "DELETE FROM music WHERE id = %s"
+        cursor.execute(delete_query, (music_id,))
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"message": "Music deleted successfully"}), 200
+
+    @app.route('/get_music_file/<int:music_id>', methods=['GET'])
+    def get_music_file(music_id):
+        print(f"Requested music_id: {music_id}")
+        
+        cursor = mysql.connection.cursor()
+        query = "SELECT file_path FROM music WHERE id = %s"
+        cursor.execute(query, (music_id,))
+        music = cursor.fetchone()
+        cursor.close()
+
+        if music:
+            try:
+                file_path = music['file_path']
+                print(f"Database file path: {file_path}")
+
+                # Assuming uploads/music is your intended directory
+                file_dir, file_name = os.path.split(file_path)
+                absolute_file_dir = os.path.abspath(file_dir)
+                print(f"Absolute File directory: {absolute_file_dir}")
+                
+                return send_from_directory(absolute_file_dir, file_name, as_attachment=True)
+            
+            except FileNotFoundError:
+                print("FileNotFoundError reached")
+                return jsonify({"message": "Music file not found on server"}), 404
+        else:
+            return jsonify({"message": "Music file not found"}), 404
