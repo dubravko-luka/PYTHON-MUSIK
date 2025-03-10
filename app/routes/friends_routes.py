@@ -244,3 +244,43 @@ def friends_routes(app):
             })
 
         return jsonify(result), 200
+    
+    @app.route('/list_sent_friend_requests', methods=['GET'])
+    def list_sent_friend_requests():
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        cursor = mysql.connection.cursor()
+
+        # Query to find all friend requests sent by the user
+        query = """
+            SELECT friend_requests.id AS request_id, users.id AS recipient_id, users.name AS recipient_name, users.email AS recipient_email
+            FROM friend_requests
+            JOIN users ON friend_requests.recipient_id = users.id
+            WHERE friend_requests.requester_id = %s
+            ORDER BY friend_requests.created_at DESC
+        """
+        
+        cursor.execute(query, (user_id,))
+        request_list = cursor.fetchall()
+        cursor.close()
+
+        result = []
+        for request_friend in request_list:
+            result.append({
+                "request_id": request_friend['request_id'],
+                "recipient_id": request_friend['recipient_id'],
+                "recipient_name": request_friend['recipient_name'],
+                "recipient_email": request_friend['recipient_email']
+            })
+
+        return jsonify(result), 200

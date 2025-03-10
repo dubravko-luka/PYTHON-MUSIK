@@ -91,7 +91,12 @@ def music_routes(app):
                     ELSE FALSE 
                 END AS liked,
                 CASE 
-                    WHEN album_music.music_id IS NOT NULL THEN TRUE 
+                    WHEN EXISTS (
+                        SELECT 1 FROM album_music 
+                        JOIN albums ON album_music.album_id = albums.id 
+                        WHERE album_music.music_id = music.id 
+                        AND albums.user_id = %s
+                    ) THEN TRUE 
                     ELSE FALSE 
                 END AS in_album,
                 album_music.album_id
@@ -99,7 +104,6 @@ def music_routes(app):
             JOIN users ON music.user_id = users.id
             LEFT JOIN favourites ON music.id = favourites.music_id AND favourites.user_id = %s
             LEFT JOIN album_music ON music.id = album_music.music_id
-            LEFT JOIN albums ON album_music.album_id = albums.id AND albums.user_id = %s
             ORDER BY music.created_at DESC
         """
         cursor.execute(query, (user_id, user_id))
@@ -179,22 +183,47 @@ def music_routes(app):
             return jsonify({"message": "Invalid token!"}), 401
 
         cursor = mysql.connection.cursor()
+        
+        # Verify ownership of the music
         query = "SELECT user_id, file_path FROM music WHERE id = %s"
         cursor.execute(query, (music_id,))
         music = cursor.fetchone()
 
         if not music:
+            cursor.close()
             return jsonify({"message": "Music not found"}), 404
 
         if music['user_id'] != user_id:
+            cursor.close()
             return jsonify({"message": "Unauthorized action"}), 403
 
-        os.remove(music['file_path'])
-        delete_query = "DELETE FROM music WHERE id = %s"
-        cursor.execute(delete_query, (music_id,))
-        mysql.connection.commit()
-        cursor.close()
+        # Remove associated records in album_music and favourites
+        try:
+            delete_favourites_query = "DELETE FROM favourites WHERE music_id = %s"
+            cursor.execute(delete_favourites_query, (music_id,))
 
+            delete_album_music_query = "DELETE FROM album_music WHERE music_id = %s"
+            cursor.execute(delete_album_music_query, (music_id,))
+
+            # Delete the music file from storage
+            if os.path.exists(music['file_path']):
+                os.remove(music['file_path'])
+            else:
+                cursor.close()
+                return jsonify({"message": "Music file not found on server"}), 404
+
+            # Finally, delete the music entry itself
+            delete_music_query = "DELETE FROM music WHERE id = %s"
+            cursor.execute(delete_music_query, (music_id,))
+
+            mysql.connection.commit()
+        except Exception as e:
+            # In case of any error, rollback the transaction
+            mysql.connection.rollback()
+            cursor.close()
+            return jsonify({"message": f"Failed to delete music: {str(e)}"}), 500
+
+        cursor.close()
         return jsonify({"message": "Music deleted successfully"}), 200
 
     @app.route('/get_music_file/<int:music_id>', methods=['GET'])
