@@ -11,12 +11,20 @@ AND REFERENCED_TABLE_NAME IS NOT NULL;
 """
 
 def init_db(app):
+<<<<<<< HEAD
     app.config['MYSQL_USER'] = get_env("MYSQL_USER")
     app.config['MYSQL_PASSWORD'] = get_env("MYSQL_PASSWORD")
     app.config['MYSQL_DB'] = get_env("MYSQL_DB")
     app.config['MYSQL_HOST'] = get_env("MYSQL_HOST")
     app.config['MYSQL_PORT'] = int(get_env("MYSQL_PORT"))
     app.config['MYSQL_CURSORCLASS'] = get_env("MYSQL_CURSORCLASS")
+=======
+    app.config['MYSQL_USER'] = 'root'
+    app.config['MYSQL_PASSWORD'] = 'root'
+    app.config['MYSQL_DB'] = 'musik'
+    app.config['MYSQL_HOST'] = 'localhost'
+    app.config['MYSQL_PORT'] = 3306
+>>>>>>> 675aff3 (Update)
 
     mysql.init_app(app)
 

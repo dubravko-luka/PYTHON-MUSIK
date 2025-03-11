@@ -13,6 +13,16 @@ def create_app():
 
     CORS(app)
 
+<<<<<<< HEAD
+=======
+    app.config['MYSQL_USER'] = 'root'
+    app.config['MYSQL_PASSWORD'] = 'root'
+    app.config['MYSQL_DB'] = 'musik'
+    app.config['MYSQL_HOST'] = 'localhost'
+    app.config['MYSQL_PORT'] = 3306
+    app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
+
+>>>>>>> 675aff3 (Update)
     init_db(app)
     user_routes(app)
     auth_routes(app)
