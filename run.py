@@ -1,6 +1,10 @@
 from app import create_app
+from app.helpers.helpers import get_env
 
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    if get_env("PYTHON_ENV") == "production":
+        app.run(host="0.0.0.0", port=get_env("PORT"))
+    else:
+        app.run(host="0.0.0.0", port=get_env("PORT"), debug=True)

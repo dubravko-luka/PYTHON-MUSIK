@@ -1,13 +1,22 @@
+from app.helpers.helpers import get_env
 from flask_mysqldb import MySQL
 
 mysql = MySQL()
 
+"""
+SELECT CONCAT('ALTER TABLE ', TABLE_NAME, ' DROP FOREIGN KEY ', CONSTRAINT_NAME, ';')
+FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+WHERE CONSTRAINT_SCHEMA = 'musik'
+AND REFERENCED_TABLE_NAME IS NOT NULL;
+"""
+
 def init_db(app):
-    app.config['MYSQL_USER'] = 'root'
-    app.config['MYSQL_PASSWORD'] = 'root'
-    app.config['MYSQL_DB'] = 'musik'
-    app.config['MYSQL_HOST'] = '127.0.0.1'
-    app.config['MYSQL_PORT'] = 3307
+    app.config['MYSQL_USER'] = get_env("MYSQL_USER")
+    app.config['MYSQL_PASSWORD'] = get_env("MYSQL_PASSWORD")
+    app.config['MYSQL_DB'] = get_env("MYSQL_DB")
+    app.config['MYSQL_HOST'] = get_env("MYSQL_HOST")
+    app.config['MYSQL_PORT'] = int(get_env("MYSQL_PORT"))
+    app.config['MYSQL_CURSORCLASS'] = get_env("MYSQL_CURSORCLASS")
 
     mysql.init_app(app)
 
@@ -20,7 +29,7 @@ def init_db(app):
             name VARCHAR(100),
             email VARCHAR(100),
             password VARCHAR(512),
-            avatar VARCHAR(255)
+            avatar VARCHAR(255) DEFAULT 'uploads/avatar\\\\default_avatar.png'
         );
         """
         cursor.execute(user_table_query)

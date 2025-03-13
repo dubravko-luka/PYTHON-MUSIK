@@ -177,8 +177,9 @@ def user_routes(app):
 
         os.makedirs(AVATAR_UPLOAD_FOLDER, exist_ok=True)
 
-        # Generate a secure filename
-        filename = secure_filename(f"{user_id}_{avatar.filename}")
+        # Generate a secure filename with a timestamp
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        filename = f"{user_id}_{timestamp}"
         file_path = os.path.join(AVATAR_UPLOAD_FOLDER, filename)
         avatar.save(file_path)
 
@@ -208,6 +209,6 @@ def user_routes(app):
                 return send_from_directory(absolute_file_dir, file_name)
             
             except FileNotFoundError:
-                return jsonify({"message": "Avatar file not found on server"}), 404
+                return jsonify({"message": "Avatar file not found on server"}), 400
         else:
             return jsonify({"message": "User or avatar not found"}), 404

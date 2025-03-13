@@ -94,7 +94,8 @@ def favourite_routes(app):
                 music.file_path, 
                 music.description, 
                 music.created_at, 
-                users.name AS user_name
+                users.name AS user_name,
+                users.id AS user_id
             FROM favourites
             JOIN music ON favourites.music_id = music.id
             JOIN users ON music.user_id = users.id
@@ -113,7 +114,8 @@ def favourite_routes(app):
                 "file_path": music['file_path'],
                 "description": music['description'],
                 "created_at": music['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
-                "user_name": music['user_name']
+                "user_name": music['user_name'],
+                "user_id": music['user_id']
             })
 
         return jsonify(result), 200

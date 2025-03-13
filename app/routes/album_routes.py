@@ -191,7 +191,7 @@ def album_routes(app):
         # Retrieve music for the album, including user details
         query = """
             SELECT music.id, music.file_path, music.description, music.created_at, 
-                users.name as user_name, users.email as user_email
+                users.name as user_name, users.email as user_email, users.id as user_id
             FROM album_music
             JOIN music ON album_music.music_id = music.id
             JOIN albums ON album_music.album_id = albums.id
@@ -211,7 +211,8 @@ def album_routes(app):
                 "description": music['description'],
                 "created_at": music['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
                 "user_name": music['user_name'],
-                "user_email": music['user_email']
+                "user_email": music['user_email'],
+                "user_id": music['user_id']
             })
 
         return jsonify(result), 200

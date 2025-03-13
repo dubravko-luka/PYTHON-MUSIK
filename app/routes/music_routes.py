@@ -142,7 +142,7 @@ def music_routes(app):
 
         cursor = mysql.connection.cursor()
         query = """
-            SELECT music.id, music.file_path, music.description, music.created_at, users.name as name, users.avatar as user_avatar
+            SELECT music.id, music.file_path, music.description, music.created_at, users.name as name, users.id as user_id, users.avatar as user_avatar
             FROM music 
             JOIN users ON music.user_id = users.id
             WHERE music.user_id = %s
