@@ -199,16 +199,19 @@ def user_routes(app):
         cursor.execute(query, (user_id,))
         user = cursor.fetchone()
         cursor.close()
-
+        
         if user and user['avatar']:
             try:
+                print(user['avatar'])
                 file_path = user['avatar']
                 file_dir, file_name = os.path.split(file_path)
                 absolute_file_dir = os.path.abspath(file_dir)
+                
+                print(absolute_file_dir)
 
                 return send_from_directory(absolute_file_dir, file_name)
             
             except FileNotFoundError:
-                return jsonify({"message": "Avatar file not found on server"}), 400
+                return jsonify({"message": "Avatar file not found on server"}), 409
         else:
-            return jsonify({"message": "User or avatar not found"}), 404
+            return jsonify({"message": "User or avatar not found"}), 400

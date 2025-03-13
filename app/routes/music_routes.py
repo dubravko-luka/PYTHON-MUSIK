@@ -251,3 +251,72 @@ def music_routes(app):
                 return jsonify({"message": "Music file not found on server"}), 404
         else:
             return jsonify({"message": "Music file not found"}), 404
+        
+    @app.route('/user_music/<int:user_id>', methods=['GET'])
+    def user_music(user_id):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            current_user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        cursor = mysql.connection.cursor()
+        query = """
+            SELECT 
+                music.id, 
+                music.file_path, 
+                music.description, 
+                music.created_at,
+                users.name AS user_name,
+                users.id AS user_id,
+                users.avatar AS user_avatar,
+                CASE 
+                    WHEN favourites.id IS NOT NULL THEN TRUE 
+                    ELSE FALSE 
+                END AS liked,
+                CASE 
+                    WHEN EXISTS (
+                        SELECT 1 FROM album_music 
+                        JOIN albums ON album_music.album_id = albums.id 
+                        WHERE album_music.music_id = music.id 
+                        AND albums.user_id = %s
+                    ) THEN TRUE 
+                    ELSE FALSE 
+                END AS in_album,
+                album_music.album_id
+            FROM music
+            JOIN users ON music.user_id = users.id
+            LEFT JOIN favourites ON music.id = favourites.music_id AND favourites.user_id = %s
+            LEFT JOIN album_music ON music.id = album_music.music_id
+            WHERE music.user_id = %s
+            ORDER BY music.created_at DESC
+        """
+        cursor.execute(query, (current_user_id, current_user_id, user_id))
+        music_list = cursor.fetchall()
+        cursor.close()
+
+        if not music_list:
+            return jsonify({"message": "No music found for this user"}), 404
+
+        result = []
+        for music in music_list:
+            result.append({
+                "id": music['id'],
+                "file_path": music['file_path'],
+                "description": music['description'],
+                "created_at": music['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                "user_name": music['user_name'],
+                "user_id": music['user_id'],
+                "user_avatar": music['user_avatar'],
+                "liked": music['liked'],
+                "in_album": music['in_album'],
+                "album_id": music['album_id']
+            })
+
+        return jsonify(result), 200

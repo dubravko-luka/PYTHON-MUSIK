@@ -188,21 +188,21 @@ def album_routes(app):
             return jsonify({"message": "Invalid token!"}), 401
 
         cursor = mysql.connection.cursor()
-        # Retrieve music for the album, including user details
         query = """
-            SELECT music.id, music.file_path, music.description, music.created_at, 
-                users.name as user_name, users.email as user_email, users.id as user_id
+            SELECT 
+                music.id, music.file_path, music.description, music.created_at,
+                music.user_id as user_id, uploaders.name as user_name, uploaders.email as user_email, uploaders.avatar as user_avatar
             FROM album_music
             JOIN music ON album_music.music_id = music.id
             JOIN albums ON album_music.album_id = albums.id
-            JOIN users ON albums.user_id = users.id
+            JOIN users as uploaders ON music.user_id = uploaders.id
             WHERE album_music.album_id = %s AND albums.user_id = %s
+            ORDER BY music.created_at DESC
         """
         cursor.execute(query, (album_id, user_id))
         music_list = cursor.fetchall()
         cursor.close()
 
-        # Convert music list into a serializable format
         result = []
         for music in music_list:
             result.append({
@@ -212,7 +212,8 @@ def album_routes(app):
                 "created_at": music['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
                 "user_name": music['user_name'],
                 "user_email": music['user_email'],
-                "user_id": music['user_id']
+                "user_id": music['user_id'],
+                "user_avatar": music['user_avatar'],
             })
 
         return jsonify(result), 200
