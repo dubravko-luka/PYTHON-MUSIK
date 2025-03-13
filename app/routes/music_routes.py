@@ -1,13 +1,13 @@
 import os
 import time
 from datetime import datetime
-from flask import request, jsonify
+from flask import request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
-from flask import send_from_directory
 import jwt
 from ..db.db import mysql
 
 UPLOAD_FOLDER = 'uploads/music'
+AVATAR_FOLDER = 'uploads/avatars'
 ALLOWED_EXTENSIONS = {'mp3', 'wav', 'flac'}
 SECRET_KEY = "your_secret_key_here"
 
@@ -19,7 +19,6 @@ def music_routes(app):
 
     @app.route('/upload_music', methods=['POST'])
     def upload_music():
-        # Ensure the directory exists
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
         token = request.headers.get('Authorization')
@@ -45,7 +44,6 @@ def music_routes(app):
             return jsonify({"message": "No selected file"}), 400
 
         if file and allowed_file(file.filename):
-            # Change filename to timestamp
             file_extension = file.filename.rsplit('.', 1)[1].lower()
             timestamp = str(int(time.time()))
             filename = f"{timestamp}.{file_extension}"
@@ -83,9 +81,10 @@ def music_routes(app):
                 music.id, 
                 music.file_path, 
                 music.description, 
-                music.created_at, 
+                music.created_at,
                 users.name AS user_name,
                 users.id AS user_id,
+                users.avatar AS user_avatar,
                 CASE 
                     WHEN favourites.id IS NOT NULL THEN TRUE 
                     ELSE FALSE 
@@ -110,7 +109,6 @@ def music_routes(app):
         music_list = cursor.fetchall()
         cursor.close()
 
-        # Convert the list of music into a serializable format
         result = []
         for music in music_list:
             result.append({
@@ -120,9 +118,10 @@ def music_routes(app):
                 "created_at": music['created_at'].strftime('%Y-%m-%d %H:%M:%S'),
                 "user_name": music['user_name'],
                 "user_id": music['user_id'],
+                "user_avatar": music['user_avatar'],  # Include user_avatar in the response
                 "liked": music['liked'],
                 "in_album": music['in_album'],
-                "album_id": music['album_id']  # Include album_id in the response
+                "album_id": music['album_id']
             })
 
         return jsonify(result), 200
@@ -143,7 +142,7 @@ def music_routes(app):
 
         cursor = mysql.connection.cursor()
         query = """
-            SELECT music.id, music.file_path, music.description, music.created_at, users.name as name
+            SELECT music.id, music.file_path, music.description, music.created_at, users.name as name, users.avatar as user_avatar
             FROM music 
             JOIN users ON music.user_id = users.id
             WHERE music.user_id = %s
@@ -158,7 +157,12 @@ def music_routes(app):
     @app.route('/music/<int:music_id>', methods=['GET'])
     def music_detail(music_id):
         cursor = mysql.connection.cursor()
-        query = "SELECT id, file_path, description, created_at, user_id FROM music WHERE id = %s"
+        query = """
+            SELECT music.id, music.file_path, music.description, music.created_at, users.id as user_id, users.avatar as user_avatar 
+            FROM music 
+            JOIN users ON music.user_id = users.id 
+            WHERE music.id = %s
+        """
         cursor.execute(query, (music_id,))
         music_detail = cursor.fetchone()
         cursor.close()
@@ -184,7 +188,6 @@ def music_routes(app):
 
         cursor = mysql.connection.cursor()
         
-        # Verify ownership of the music
         query = "SELECT user_id, file_path FROM music WHERE id = %s"
         cursor.execute(query, (music_id,))
         music = cursor.fetchone()
@@ -197,7 +200,6 @@ def music_routes(app):
             cursor.close()
             return jsonify({"message": "Unauthorized action"}), 403
 
-        # Remove associated records in album_music and favourites
         try:
             delete_favourites_query = "DELETE FROM favourites WHERE music_id = %s"
             cursor.execute(delete_favourites_query, (music_id,))
@@ -205,20 +207,17 @@ def music_routes(app):
             delete_album_music_query = "DELETE FROM album_music WHERE music_id = %s"
             cursor.execute(delete_album_music_query, (music_id,))
 
-            # Delete the music file from storage
             if os.path.exists(music['file_path']):
                 os.remove(music['file_path'])
             else:
                 cursor.close()
                 return jsonify({"message": "Music file not found on server"}), 404
 
-            # Finally, delete the music entry itself
             delete_music_query = "DELETE FROM music WHERE id = %s"
             cursor.execute(delete_music_query, (music_id,))
 
             mysql.connection.commit()
         except Exception as e:
-            # In case of any error, rollback the transaction
             mysql.connection.rollback()
             cursor.close()
             return jsonify({"message": f"Failed to delete music: {str(e)}"}), 500
@@ -241,7 +240,6 @@ def music_routes(app):
                 file_path = music['file_path']
                 print(f"Database file path: {file_path}")
 
-                # Assuming uploads/music is your intended directory
                 file_dir, file_name = os.path.split(file_path)
                 absolute_file_dir = os.path.abspath(file_dir)
                 print(f"Absolute File directory: {absolute_file_dir}")

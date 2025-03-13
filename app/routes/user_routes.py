@@ -1,11 +1,23 @@
 import bcrypt
+import os
+import time
+from datetime import datetime
+from flask import send_from_directory, abort
 import jwt
+from werkzeug.utils import secure_filename
 from flask import request, jsonify
 from ..db.db import mysql
 
 SECRET_KEY = "your_secret_key_here"
+AVATAR_UPLOAD_FOLDER = 'uploads/avatar'
+ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+
+def is_allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 def user_routes(app):
+    app.config['UPLOAD_FOLDER_AVATAR'] = AVATAR_UPLOAD_FOLDER
+
     @app.route('/user_info', methods=['GET'])
     def get_user_info():
         token = request.headers.get('Authorization')
@@ -23,7 +35,7 @@ def user_routes(app):
             return jsonify({"message": "Invalid token!"}), 401
 
         cursor = mysql.connection.cursor()
-        query = "SELECT id, name, email FROM users WHERE id = %s"
+        query = "SELECT id, name, email, avatar FROM users WHERE id = %s"
         cursor.execute(query, (user_id,))
         user = cursor.fetchone()
         cursor.close()
@@ -34,7 +46,8 @@ def user_routes(app):
         return jsonify({
             "id": user['id'],
             "name": user['name'],
-            "email": user['email']
+            "email": user['email'],
+            "avatar": user['avatar']  # Add avatar to the response
         }), 200
     
     @app.route('/get_user_profile/<int:profile_user_id>', methods=['GET'])
@@ -54,7 +67,7 @@ def user_routes(app):
         cursor = mysql.connection.cursor()
 
         # Get the profile info
-        user_query = "SELECT id, name, email FROM users WHERE id = %s"
+        user_query = "SELECT id, name, email, avatar FROM users WHERE id = %s"
         cursor.execute(user_query, (profile_user_id,))
         user_profile = cursor.fetchone()
 
@@ -97,11 +110,104 @@ def user_routes(app):
             "id": user_profile['id'],
             "name": user_profile['name'],
             "email": user_profile['email'],
+            "avatar": user_profile['avatar'],  # Add avatar to the response
             "my_profile": my_profile,
             "is_friend": is_friend,
             "is_friend_request": is_friend_request,
             "friend_request_id": friend_request_id,
-            "friend_request_direction": friend_request_direction  # Add direction field
+            "friend_request_direction": friend_request_direction
         }
 
         return jsonify(user_data), 200
+    
+    @app.route('/update_user_info', methods=['PUT'])
+    def update_user_info():
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        # Getting user details from request
+        name = request.json.get('name')
+        email = request.json.get('email')
+
+        # Basic validation
+        if not name or not email:
+            return jsonify({"message": "Name and email are required"}), 400
+
+        cursor = mysql.connection.cursor()
+        update_query = "UPDATE users SET name = %s, email = %s WHERE id = %s"
+        cursor.execute(update_query, (name, email, user_id))
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"message": "User information updated successfully"}), 200
+    
+    @app.route('/upload_avatar', methods=['POST'])
+    def upload_avatar():
+        if 'avatar' not in request.files:
+            return jsonify({"message": "No file part"}), 400
+
+        avatar = request.files['avatar']
+
+        if avatar.filename == '':
+            return jsonify({"message": "No file selected"}), 400
+
+        if not avatar or not is_allowed_file(avatar.filename):
+            return jsonify({"message": "File type not allowed"}), 400
+
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        os.makedirs(AVATAR_UPLOAD_FOLDER, exist_ok=True)
+
+        # Generate a secure filename
+        filename = secure_filename(f"{user_id}_{avatar.filename}")
+        file_path = os.path.join(AVATAR_UPLOAD_FOLDER, filename)
+        avatar.save(file_path)
+
+        cursor = mysql.connection.cursor()
+        update_query = "UPDATE users SET avatar = %s WHERE id = %s"
+        cursor.execute(update_query, (file_path, user_id))
+        mysql.connection.commit()
+        cursor.close()
+
+        return jsonify({"message": "Avatar uploaded successfully", "avatar_path": file_path}), 201
+        
+    @app.route('/get_avatar/<int:user_id>', methods=['GET'])
+    def get_avatar(user_id):
+        # Retrieve the avatar path from the database
+        cursor = mysql.connection.cursor()
+        query = "SELECT avatar FROM users WHERE id = %s"
+        cursor.execute(query, (user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+
+        if user and user['avatar']:
+            try:
+                file_path = user['avatar']
+                file_dir, file_name = os.path.split(file_path)
+                absolute_file_dir = os.path.abspath(file_dir)
+
+                return send_from_directory(absolute_file_dir, file_name)
+            
+            except FileNotFoundError:
+                return jsonify({"message": "Avatar file not found on server"}), 404
+        else:
+            return jsonify({"message": "User or avatar not found"}), 404

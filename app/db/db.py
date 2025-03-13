@@ -19,7 +19,8 @@ def init_db(app):
             id INT AUTO_INCREMENT PRIMARY KEY,
             name VARCHAR(100),
             email VARCHAR(100),
-            password VARCHAR(512)
+            password VARCHAR(512),
+            avatar VARCHAR(255)
         );
         """
         cursor.execute(user_table_query)
