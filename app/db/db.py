@@ -105,5 +105,18 @@ def init_db(app):
         """
         cursor.execute(friend_requests_table_query)
 
+        messages_table_query = """
+        CREATE TABLE IF NOT EXISTS messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            sender_id INT NOT NULL,
+            recipient_id INT NOT NULL,
+            content TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sender_id) REFERENCES users(id),
+            FOREIGN KEY (recipient_id) REFERENCES users(id)
+        );
+        """
+        cursor.execute(messages_table_query)
+
         mysql.connection.commit()
         cursor.close()

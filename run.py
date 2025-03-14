@@ -1,10 +1,10 @@
 from app import create_app
 from app.helpers.helpers import get_env
 
-app = create_app()
+app, socketio = create_app()
 
 if __name__ == '__main__':
     if get_env("PYTHON_ENV") == "production":
-        app.run(host="0.0.0.0", port=get_env("PORT"))
+        socketio.run(app, host="0.0.0.0", port=get_env("PORT"))
     else:
-        app.run(host="0.0.0.0", port=get_env("PORT"), debug=True)
+        socketio.run(app, host="0.0.0.0", port=get_env("PORT"), debug=True)
