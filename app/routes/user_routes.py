@@ -215,3 +215,45 @@ def user_routes(app):
                 return jsonify({"message": "Avatar file not found on server"}), 409
         else:
             return jsonify({"message": "User or avatar not found"}), 400
+        
+    @app.route('/search_users', methods=['GET'])
+    def search_users():
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 403
+
+        try:
+            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+            # You can extract user_id if needed: user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Invalid token!"}), 401
+
+        # Get the search query parameter
+        query = request.args.get('query')
+        if not query:
+            return jsonify({"message": "Query parameter is missing"}), 400
+
+        cursor = mysql.connection.cursor()
+        search_query = f"SELECT id, name, email, avatar FROM users WHERE name LIKE %s"
+        like_pattern = f"%{query}%"  # to perform a partial match
+        cursor.execute(search_query, (like_pattern,))
+        users = cursor.fetchall()
+        cursor.close()
+
+        if not users:
+            return jsonify({"message": "No users found"}), 404
+
+        # Convert the fetched data to a list of dictionaries
+        users_list = []
+        for user in users:
+            user_data = {
+                "id": user['id'],
+                "name": user['name'],
+                "email": user['email'],
+                "avatar": user['avatar']
+            }
+            users_list.append(user_data)
+
+        return jsonify(users_list), 200
