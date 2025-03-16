@@ -243,7 +243,7 @@ def user_routes(app):
         cursor.close()
 
         if not users:
-            return jsonify({"message": "No users found"}), 404
+            return jsonify([]), 200
 
         # Convert the fetched data to a list of dictionaries
         users_list = []

@@ -302,7 +302,7 @@ def music_routes(app):
         cursor.close()
 
         if not music_list:
-            return jsonify({"message": "No music found for this user"}), 404
+            return jsonify([]), 200
 
         result = []
         for music in music_list:
@@ -377,7 +377,7 @@ def music_routes(app):
         cursor.close()
 
         if not music_list:
-            return jsonify({"message": "No music found"}), 404
+            return jsonify([]), 200
 
         result = []
         for music in music_list:
