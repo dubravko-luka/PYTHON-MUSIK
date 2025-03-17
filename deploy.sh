@@ -20,4 +20,4 @@ if [ "$(docker ps -q -f name=musik)" ]; then
 fi
 
 # Run the Docker container
-docker run -d -p 5000:5000 --name musik musik
+docker run -d -p 8088:8088 --name musik musik
